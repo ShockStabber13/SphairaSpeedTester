@@ -4,6 +4,7 @@ ifeq ($(strip $(DEVKITPRO)),)
 $(error DEVKITPRO is not set)
 endif
 
+TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
 
 TARGET      := SphairaStartupProbe
@@ -13,7 +14,7 @@ APP_VERSION := 0.2.0
 BUILD       := build
 SOURCES     := source
 ARCH        := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS      = -O2 -g -Wall -Wextra -ffunction-sections $(ARCH) $(INCLUDE)
+CFLAGS      = -O2 -g -Wall -Wextra -ffunction-sections $(ARCH) $(INCLUDE) -D__SWITCH__
 LDFLAGS     := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH)
 LIBS        := -lnx
 LIBDIRS     := $(LIBNX)
@@ -28,6 +29,7 @@ export OFILES := $(CFILES:.c=.o)
 export LD := $(CC)
 export INCLUDE := $(foreach dir,$(LIBDIRS),-I$(dir)/include)
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+export NROFLAGS += --icon=$(LIBNX)/default_icon.jpg --nacp=$(CURDIR)/$(TARGET).nacp
 .PHONY: all clean
 all: $(BUILD)
 $(BUILD):

@@ -43,6 +43,20 @@ jobs:
       - name: Build startup probe
         if: steps.probe_cached.outputs.cache-hit != 'true'
         run: make -C startup-probe -j2
+      - name: Validate NRO containers and embedded metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          for name in ("SphairaSpeedTester", "SphairaStartupProbe"):
+              path = Path("speedtester" if "SpeedTester" in name else "startup-probe") / (name + ".nro")
+              blob = path.read_bytes()
+              assert blob[16:20] == b"NRO0", f"{path}: missing NRO0 header"
+              data_end = struct.unpack_from("<I", blob, 0x18)[0]
+              assert 0 < data_end <= len(blob), f"{path}: invalid body size"
+              assert blob[data_end:data_end+4] == b"ASET", f"{path}: missing ASET metadata"
+              print(f"{path}: {len(blob)} bytes, body={data_end}, valid NRO0/ASET")
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: SphairaSpeedTester-NRO

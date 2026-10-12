@@ -4,6 +4,7 @@ ifeq ($(strip $(DEVKITPRO)),)
 $(error DEVKITPRO is not set. Install devkitPro and source its environment first)
 endif
 
+TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
 
 TARGET     := SphairaSpeedTester
@@ -15,7 +16,7 @@ SOURCES    := source
 INCLUDES   := include
 
 ARCH      := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS    = -g -Wall -Wextra -O2 -ffunction-sections $(ARCH) $(INCLUDE)
+CFLAGS    = -g -Wall -Wextra -O2 -ffunction-sections $(ARCH) $(INCLUDE) -D__SWITCH__
 CXXFLAGS  = $(CFLAGS) -std=gnu++17 -fno-rtti
 ASFLAGS   := -g $(ARCH)
 LDFLAGS   := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
@@ -35,7 +36,7 @@ export OFILES := $(OFILES_SRC)
 export LD := $(CXX)
 export INCLUDE := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) $(foreach dir,$(LIBDIRS),-I$(dir)/include) -I$(CURDIR)/$(BUILD)
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
-export NROFLAGS :=
+export NROFLAGS += --icon=$(LIBNX)/default_icon.jpg --nacp=$(CURDIR)/$(TARGET).nacp
 .PHONY: all clean
 all: $(BUILD)
 $(BUILD):
