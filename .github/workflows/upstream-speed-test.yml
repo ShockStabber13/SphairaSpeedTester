@@ -1,7 +1,7 @@
 name: Sphaira original-engine speed test
 on:
   push:
-    branches: [experiment/upstream-engine-benchmark]
+    branches: [experiment/ablation-01-cpu-boost-off]
   workflow_dispatch:
 permissions:
   contents: read
@@ -43,6 +43,6 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: SphairaSpeedTester-OriginalEngine
+          name: SphairaSpeedTester-Test01-NoCpuBoost
           path: build/Lite/SphairaSpeedTester.nro
           if-no-files-found: error

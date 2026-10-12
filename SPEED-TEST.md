@@ -13,3 +13,7 @@ Each run tests up to **256 MiB** and requires a file at least that large support
 ## Dedicated interface
 
 The original Sphaira `MainMenu` has been replaced with a minimal black/green benchmark screen while retaining the native Sphaira `App`, networking and transfer pipeline. The menu registry is empty, update checks and browser tabs are gone, and the NRO uses a neutral app icon rather than original Sphaira branding.
+
+## A/B experiment 01 — CPU boost off
+
+This commit differs from benchmark/known-good-9mbs by **one behavior only**: `App::SetBoostMode(true)` is ignored across startup and progress UI. `SetBoostMode(false)` continues to request normal mode. The original sockets, curl options, PushThreadData, yati::source::Http and transfer buffers are unchanged. Compare **A / HTTP-only** using the *same resolved AllDebrid file and same network* on both builds. Record 2–3 runs and their MiB/s. The historical known-good result is approximately 9 MB/s, but this new build is untested on real hardware. If it falls significantly, CPU boost is a contributor; if unchanged, boost is not required for that measured speed under these conditions.

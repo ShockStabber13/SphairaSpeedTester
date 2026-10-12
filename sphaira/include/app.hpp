@@ -226,6 +226,9 @@ public:
     }
 
     static void SetBoostMode(bool enable, bool force = false) {
+        // ABLATION 01: isolate Sphaira CPU boost's contribution to throughput.
+        // No boost request is allowed. Every other original download path stays intact.
+        if (enable) return;
         static Mutex mutex{};
         static int ref_count{};
 
