@@ -42,3 +42,12 @@ The tester writes startup markers to `sdmc:/switch/SphairaSpeedTester/debug.log`
 The UI now starts **without initializing network services**. If it opens but fails after pressing A/X, check `debug.log` for `Network: ...` markers. An immediate crash before the menu is a separate startup issue; share the Atmosphere crash report and `debug.log` to pinpoint it.
 
 GitHub Actions builds only the tiny speed tester (never full Sphaira), runs once per push, and caches build outputs by the exact source/Makefile hash. Changed files trigger a fresh clean-environment build; local `make` automatically rebuilds only modified sources.
+
+
+## v0.2 launch-crash probe
+
+If the main tester closes immediately, try the separate \`SphairaStartupProbe.nro\` artifact first. This tiny C-only homebrew **does not load curl or allocate the download buffers**. It should display a simple console and record \`sdmc:/switch/SphairaStartupProbe.log\`, directly in the existing \`switch\` folder.
+
+The main tester now writes \`sdmc:/switch/SphairaSpeedTester-startup.log\` **before** console initialization. It records whether app directory creation worked and remains independent of the absent app folder. Note: the SD card is mounted during libnx startup, before \`main\`. A missing app folder alone does not prove a pre-main crash.
+
+Use the distinct probe filename and main tester filename; don't overwrite one with the other. If the probe itself closes immediately and produces no root log, the problem is at or before minimal homebrew initialization.

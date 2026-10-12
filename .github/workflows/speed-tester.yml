@@ -30,8 +30,26 @@ jobs:
       - name: Build changed sources
         if: steps.cached.outputs.cache-hit != 'true'
         run: make -C speedtester -j2
+      - name: Reuse verified startup probe
+        id: probe_cached
+        uses: actions/cache@v4
+        with:
+          path: |
+            startup-probe/build
+            startup-probe/SphairaStartupProbe.nro
+            startup-probe/SphairaStartupProbe.elf
+            startup-probe/SphairaStartupProbe.nacp
+          key: startup-probe-devkitpro-v1-${{ hashFiles('startup-probe/Makefile', 'startup-probe/source/**') }}
+      - name: Build startup probe
+        if: steps.probe_cached.outputs.cache-hit != 'true'
+        run: make -C startup-probe -j2
       - uses: actions/upload-artifact@v4
         with:
           name: SphairaSpeedTester-NRO
           path: speedtester/SphairaSpeedTester.nro
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SphairaStartupProbe-NRO
+          path: startup-probe/SphairaStartupProbe.nro
           if-no-files-found: error

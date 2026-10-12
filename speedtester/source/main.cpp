@@ -3,6 +3,7 @@
 #include <curl/curl.h>
 #include <chrono>
 #include <cstdio>
+#include <cerrno>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -13,10 +14,19 @@ namespace {
 constexpr const char* DIR = "sdmc:/switch/SphairaSpeedTester";
 constexpr const char* URL_FILE = "sdmc:/switch/SphairaSpeedTester/url.txt";
 constexpr const char* LOG_FILE = "sdmc:/switch/SphairaSpeedTester/debug.log";
+// Write to the already-present /switch folder so diagnostics survive even
+// when our application's own directory could not be created.
+constexpr const char* ROOT_LOG = "sdmc:/switch/SphairaSpeedTester-startup.log";
 
 void logStage(const char* stage) {
-    std::ofstream log(LOG_FILE, std::ios::app);
-    if (log) log << stage << '\n';
+    for (const char* path : {ROOT_LOG, LOG_FILE}) {
+        FILE* file = std::fopen(path, "a");
+        if (file) {
+            std::fprintf(file, "tester: %s\n", stage);
+            std::fflush(file);
+            std::fclose(file);
+        }
+    }
 }
 
 std::string loadUrl() {
@@ -42,7 +52,7 @@ double mib(std::uint64_t bytes) {
 void render(const std::string& url, const tester::Progress* p, bool sd,
             double runningSeconds = 0) {
     std::printf("\x1b[2J\x1b[H");
-    std::printf("SPHAIRA SPEED TESTER v0.1\n");
+    std::printf("SPHAIRA SPEED TESTER v0.2 (diagnostics)\n");
     std::printf("Sphaira-derived 64 KiB network + 2x4 MiB SD ring\n\n");
     std::printf("Source: %s\n", hostOnly(url).c_str());
     std::printf("Sample: 256 MiB (HTTP Range 0-268435455)\n");
@@ -76,8 +86,15 @@ void render(const std::string& url, const tester::Progress* p, bool sd,
 } // namespace
 
 int main(int, char**) {
+    logStage("entered main (before consoleInit)");
     consoleInit(nullptr);
-    mkdir(DIR, 0777);
+    logStage("console initialized");
+    const int dirResult = mkdir(DIR, 0777);
+    const int dirErrno = errno;
+    char dirNote[96];
+    std::snprintf(dirNote, sizeof(dirNote),
+                  "mkdir directory result=%d errno=%d", dirResult, dirErrno);
+    logStage(dirNote);
     logStage("Startup: console initialized (network NOT initialized)");
     // No BSD sockets, SSL services, or curl during app startup. This
     // isolates launch crashes from the download pipeline.
