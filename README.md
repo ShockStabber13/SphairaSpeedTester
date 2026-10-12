@@ -36,3 +36,9 @@ Upstream copyright and GPL-3.0 terms are retained. See \`LICENSE\`.
 ## Diagnosing a Switch crash
 
 The tester writes startup markers to `sdmc:/switch/SphairaSpeedTester/debug.log` (only during setup, start/end, not inside the benchmark hot path). If the NRO closes unexpectedly, check the last marker and the Atmosphere fatal report, if generated. Tell us whether the crash happens **on launch**, after **A (HTTP-only)**, or after **X (HTTP+SD)**. Run through **Homebrew Menu with full RAM** (hold R while launching a game) if applet memory limits are involved. No benchmarks have been measured on actual hardware yet.
+
+## Crash isolation and incremental builds
+
+The UI now starts **without initializing network services**. If it opens but fails after pressing A/X, check `debug.log` for `Network: ...` markers. An immediate crash before the menu is a separate startup issue; share the Atmosphere crash report and `debug.log` to pinpoint it.
+
+GitHub Actions builds only the tiny speed tester (never full Sphaira), runs once per push, and caches build outputs by the exact source/Makefile hash. Changed files trigger a fresh clean-environment build; local `make` automatically rebuilds only modified sources.

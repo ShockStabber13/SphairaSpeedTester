@@ -77,35 +77,11 @@ void render(const std::string& url, const tester::Progress* p, bool sd,
 
 int main(int, char**) {
     consoleInit(nullptr);
-    std::printf("Sphaira Speed Tester: starting...\n");
-    consoleUpdate(nullptr);
-    const Result socket = socketInitializeDefault();
-    if (R_FAILED(socket)) {
-        std::printf("Network initialization failed: 0x%08X\n", socket);
-        consoleUpdate(nullptr);
-        // Keep display visible for the user rather than crashing.
-        padConfigureInput(1, HidNpadStyleSet_NpadStandard);
-        PadState errorPad;
-        padInitializeDefault(&errorPad);
-        for (;;) {
-            padUpdate(&errorPad);
-            if (padGetButtonsDown(&errorPad) & HidNpadButton_Plus) break;
-            svcSleepThread(100000000);
-        }
-        consoleExit(nullptr);
-        return 1;
-    }
     mkdir(DIR, 0777);
-    logStage("Startup: network initialized");
-    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
-        logStage("Startup: curl init FAILED");
-        std::printf("curl initialization failed; press HOME to exit.\n");
-        consoleUpdate(nullptr);
-        for (;;) {
-            svcSleepThread(100000000);
-        }
-    }
-    logStage("Startup: curl initialized");
+    logStage("Startup: console initialized (network NOT initialized)");
+    // No BSD sockets, SSL services, or curl during app startup. This
+    // isolates launch crashes from the download pipeline.
+    bool networkReady = false;
 
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     PadState pad;
@@ -114,6 +90,7 @@ int main(int, char**) {
     std::string url = loadUrl();
     logStage("Startup: URL configuration read");
     std::unique_ptr<tester::Progress> progress;
+    std::string startupError;
     std::thread worker;
     bool sd = false, running = true;
     auto lastUi = std::chrono::steady_clock::now();
@@ -134,6 +111,29 @@ int main(int, char**) {
             if (worker.joinable()) worker.join();
             url = loadUrl();
             if (!url.empty()) {
+                if (!networkReady) {
+                    logStage("Network: initializing on user request");
+                    const Result socketResult = socketInitializeDefault();
+                    if (R_FAILED(socketResult)) {
+                        char code[32];
+                        std::snprintf(code, sizeof(code), "0x%08X",
+                                      static_cast<unsigned>(socketResult));
+                        startupError = std::string("Socket init failed: ") + code;
+                        logStage("Network: socket init FAILED");
+                    } else if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+                        startupError = "curl initialization failed";
+                        logStage("Network: curl init FAILED");
+                        socketExit();
+                    } else {
+                        networkReady = true;
+                        startupError.clear();
+                        logStage("Network: ready");
+                    }
+                }
+                if (!startupError.empty()) {
+                    logStage("Network: blocked test after init failure");
+                    continue;
+                }
                 sd = (down & HidNpadButton_X) != 0;
                 progress = std::make_unique<tester::Progress>();
                 started = std::chrono::steady_clock::now();
@@ -164,6 +164,10 @@ int main(int, char**) {
             const double seconds = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - started).count();
             render(url, progress.get(), sd, seconds);
+            if (!startupError.empty()) {
+                std::printf("\nNetwork initialization: %s\n", startupError.c_str());
+                consoleUpdate(nullptr);
+            }
         }
         svcSleepThread(16000000);
     }
@@ -171,8 +175,10 @@ int main(int, char**) {
     if (progress && !progress->done.load()) progress->cancel.store(true);
     if (worker.joinable()) worker.join();
     logStage("Shutdown: normal");
-    curl_global_cleanup();
-    socketExit();
+    if (networkReady) {
+        curl_global_cleanup();
+        socketExit();
+    }
     consoleExit(nullptr);
     return 0;
 }
