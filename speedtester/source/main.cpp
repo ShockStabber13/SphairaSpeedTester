@@ -72,9 +72,12 @@ int main(int, char**) {
         std::printf("Network initialization failed: 0x%08X\n", socket);
         consoleUpdate(nullptr);
         // Keep display visible for the user rather than crashing.
+        padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+        PadState errorPad;
+        padInitializeDefault(&errorPad);
         for (;;) {
-            hidScanInput();
-            if (hidKeysDown(CONTROLLER_P1_AUTO) & KEY_PLUS) break;
+            padUpdate(&errorPad);
+            if (padGetButtonsDown(&errorPad) & HidNpadButton_Plus) break;
             svcSleepThread(100000000);
         }
         consoleExit(nullptr);

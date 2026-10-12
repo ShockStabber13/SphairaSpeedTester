@@ -15,11 +15,11 @@ SOURCES    := source
 INCLUDES   := include
 
 ARCH      := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS    := -g -Wall -Wextra -O2 -ffunction-sections $(ARCH)
-CXXFLAGS  := $(CFLAGS) -std=gnu++17 -fno-rtti
+CFLAGS    = -g -Wall -Wextra -O2 -ffunction-sections $(ARCH) $(INCLUDE)
+CXXFLAGS  = $(CFLAGS) -std=gnu++17 -fno-rtti
 ASFLAGS   := -g $(ARCH)
 LDFLAGS   := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
-LIBS      := $(shell $(PREFIX)pkg-config --libs libcurl) -lz -lnx
+LIBS      := -lcurl -lz -lnx
 LIBDIRS   := $(PORTLIBS) $(LIBNX)
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
