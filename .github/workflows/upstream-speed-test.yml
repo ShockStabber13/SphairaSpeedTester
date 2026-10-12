@@ -17,7 +17,7 @@ jobs:
           apt-get update && apt-get install -y texinfo
           git config --global --add safe.directory '*'
           git clone --depth 1 -b iosupport https://github.com/R-YaTian/newlib.git /tmp/newlib
-          (cd /tmp/newlib && ./build-libgloss-local.sh)
+          (cd /tmp/newlib && bash ./build-libgloss-local.sh)
           git clone --depth 1 --recurse-submodules https://github.com/switchbrew/libnx.git /tmp/libnx
           make -C /tmp/libnx install -j4
       - uses: lukka/get-cmake@v4.4.2
