@@ -724,7 +724,7 @@ nx_generate_nacp(
 # create nro
 nx_create_nro(sphaira
     OUTPUT ${CMAKE_BINARY_DIR}/sphaira.nro
-    ICON ${CMAKE_SOURCE_DIR}/assets/icon.jpg
+    ICON $ENV{DEVKITPRO}/libnx/default_icon.jpg
     NACP sphaira.nacp
     ROMFS sphaira_romfs
 )

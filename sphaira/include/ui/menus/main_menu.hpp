@@ -73,6 +73,8 @@ private:
     std::unique_ptr<MenuBase> m_right_menu{};
     MenuBase* m_current_menu{};
 
+    std::string m_url_host{};
+    std::string m_last_result{};
     std::string m_update_url{};
     std::string m_update_version{};
     std::string m_update_description{};
