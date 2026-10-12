@@ -132,7 +132,6 @@ add_executable(sphaira
     source/utils/devoptab_bfsar.cpp
     source/utils/devoptab_vfs.cpp
     source/utils/devoptab_fatfs.cpp
-    source/utils/devoptab_game.cpp
     source/utils/devoptab_mounts.cpp
     source/utils/devoptab.cpp
     source/utils/ownfoil.cpp
