@@ -123,6 +123,7 @@ add_executable(sphaira
     source/location.cpp
     source/log.cpp
     source/main.cpp
+    source/speed_test.cpp
     source/album_caps.cpp
     source/album_server.cpp
     source/nro.cpp
@@ -715,8 +716,8 @@ target_compile_options(sphaira PRIVATE
 # create nacp
 nx_generate_nacp(
     OUTPUT sphaira.nacp
-    NAME ${CMAKE_PROJECT_NAME}
-    AUTHOR TotalJustice
+    NAME "Sphaira Speed Tester"
+    AUTHOR "Sphaira community"
     VERSION ${sphaira_VERSION}
 )
 

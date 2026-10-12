@@ -1,0 +1,48 @@
+name: Sphaira original-engine speed test
+on:
+  push:
+    branches: [experiment/upstream-engine-benchmark]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Original Sphaira dependencies
+        run: |
+          apt-get update && apt-get install -y texinfo
+          git config --global --add safe.directory '*'
+          git clone --depth 1 -b iosupport https://github.com/R-YaTian/newlib.git /tmp/newlib
+          (cd /tmp/newlib && ./build-libgloss-local.sh)
+          git clone --depth 1 --recurse-submodules https://github.com/switchbrew/libnx.git /tmp/libnx
+          make -C /tmp/libnx install -j4
+      - uses: lukka/get-cmake@v4.4.2
+      - name: Restore incremental build
+        uses: actions/cache@v4
+        with:
+          path: build/Lite
+          key: upstream-test-lite-v1-${{ github.sha }}
+          restore-keys: |
+            upstream-test-lite-v1-
+      - name: Configure upstream Sphaira Lite
+        run: cmake --preset Lite -DLTO=OFF
+      - name: Incremental compile (upstream sources)
+        run: cmake --build --preset Lite --parallel 4
+      - name: Package and verify NRO
+        run: |
+          cp build/Lite/sphaira.nro build/Lite/SphairaSpeedTester.nro
+          python3 - <<'PY'
+          from pathlib import Path
+          b=Path("build/Lite/SphairaSpeedTester.nro").read_bytes()
+          assert b[16:20]==b"NRO0"
+          print("Verified NRO:", len(b), "bytes")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SphairaSpeedTester-OriginalEngine
+          path: build/Lite/SphairaSpeedTester.nro
+          if-no-files-found: error

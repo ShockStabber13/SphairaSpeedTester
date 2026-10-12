@@ -30,6 +30,7 @@
 #include "defines.hpp"
 #include "i18n.hpp"
 #include "threaded_file_transfer.hpp"
+#include "speed_test.hpp"
 #include "nacp_compat.hpp"
 
 #include <cstring>
@@ -601,6 +602,14 @@ MainMenu::MainMenu() {
             options->Add<SidebarEntryCallback>("Network"_i18n, [this](){
                 auto options = std::make_unique<Sidebar>("Network Options"_i18n, Sidebar::Side::LEFT);
                 ON_SCOPE_EXIT(App::Push(std::move(options)));
+
+                options->Add<SidebarEntryCallback>("AllDebrid: HTTP only", [](){
+                    speedtest::Start(false);
+                }, "Original Sphaira network engine, no SD writes.");
+
+                options->Add<SidebarEntryCallback>("AllDebrid: HTTP + SD", [](){
+                    speedtest::Start(true);
+                }, "Original Sphaira network and threaded SD transfer.");
 
                 options->Add<SidebarEntryCallback>("FTP"_i18n, [](){ App::DisplayFtpOptions(); },
                     i18n::get("ftp_settings_info",
