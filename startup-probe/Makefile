@@ -13,7 +13,7 @@ APP_VERSION := 0.2.0
 BUILD       := build
 SOURCES     := source
 ARCH        := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS      := -O2 -g -Wall -Wextra -ffunction-sections $(ARCH)
+CFLAGS      = -O2 -g -Wall -Wextra -ffunction-sections $(ARCH) $(INCLUDE)
 LDFLAGS     := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH)
 LIBS        := -lnx
 LIBDIRS     := $(LIBNX)
