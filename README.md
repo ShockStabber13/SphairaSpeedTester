@@ -51,3 +51,7 @@ If the main tester closes immediately, try the separate \`SphairaStartupProbe.nr
 The main tester now writes \`sdmc:/switch/SphairaSpeedTester-startup.log\` **before** console initialization. It records whether app directory creation worked and remains independent of the absent app folder. Note: the SD card is mounted during libnx startup, before \`main\`. A missing app folder alone does not prove a pre-main crash.
 
 Use the distinct probe filename and main tester filename; don't overwrite one with the other. If the probe itself closes immediately and produces no root log, the problem is at or before minimal homebrew initialization.
+
+## Longer, selectable benchmark size
+
+Use **Left/Right** on the idle menu to select **256 MiB / 512 MiB / 1024 MiB / 2048 MiB**. The default is **1024 MiB (1 GiB)**, which normally runs about four times longer than the old 256 MiB test at the same transfer speed. Both A (HTTP only) and X (HTTP + SD) use the selected size and show live MiB/s. The source file must contain at least as many bytes as the chosen size for a complete sample. SD mode temporarily preallocates that much free SD space, then deletes its sample file. Network/staging RAM buffer sizes are unchanged.\n

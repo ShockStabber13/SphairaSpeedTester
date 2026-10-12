@@ -4,8 +4,10 @@
 #include <string>
 
 namespace tester {
-constexpr std::uint64_t SAMPLE_BYTES = 256ULL * 1024 * 1024;
+constexpr std::uint64_t DEFAULT_SAMPLE_BYTES = 1024ULL * 1024 * 1024;
 struct Progress {
+    // Immutable during a test; GUI sets this before starting the worker.
+    std::uint64_t sampleBytes{DEFAULT_SAMPLE_BYTES};
     std::atomic<bool> cancel{false};
     std::atomic<bool> done{false};
     std::atomic<std::uint64_t> received{0};

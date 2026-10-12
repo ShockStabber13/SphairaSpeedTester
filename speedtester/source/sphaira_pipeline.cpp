@@ -46,11 +46,11 @@ struct PushPull {
         const std::size_t count = size * nmemb;
         if (!ptr || !count || self.progress.cancel.load()) return 0;
         std::lock_guard<std::mutex> lock(self.mutex);
-        if (self.accepted >= SAMPLE_BYTES) {
+        if (self.accepted >= self.progress.sampleBytes) {
             self.intentionalStop = true; // server ignored Range; sample done
             return 0;
         }
-        const auto space = SAMPLE_BYTES - self.accepted;
+        const auto space = self.progress.sampleBytes - self.accepted;
         if (count > space) {
             // Last callback crossed the requested sample boundary. curl treats
             // a short callback as an error; record the deliberate sample stop.
@@ -125,7 +125,7 @@ struct PushPull {
             return;
         }
         curl = h;
-        const std::string range = "0-" + std::to_string(SAMPLE_BYTES - 1);
+        const std::string range = "0-" + std::to_string(progress.sampleBytes - 1);
         curl_easy_setopt(h, CURLOPT_URL, url.c_str());
         curl_easy_setopt(h, CURLOPT_RANGE, range.c_str());
         curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
@@ -227,12 +227,14 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
     bool sdOpened = false;
     std::string failure;
     try {
+        if (progress.sampleBytes < BLOCK || progress.sampleBytes > (2048ULL * 1024 * 1024))
+            throw std::runtime_error("Invalid sample length");
         if (writeSd) {
             sd = fsdevGetDeviceFileSystem("sdmc");
             if (!sd) throw std::runtime_error("SD card filesystem unavailable");
             fsFsDeleteFile(sd, FS_FILE); // previous aborted test, if any
             Result rc = fsFsCreateFile(sd, FS_FILE,
-                                       static_cast<s64>(SAMPLE_BYTES), 0);
+                                       static_cast<s64>(progress.sampleBytes), 0);
             if (R_FAILED(rc)) throw std::runtime_error("SD allocate: " + hexResult(rc));
             rc = fsFsOpenFile(sd, FS_FILE, FsOpenMode_Write, &sdFile);
             if (R_FAILED(rc)) throw std::runtime_error("SD open: " + hexResult(rc));
@@ -292,9 +294,9 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
         std::vector<unsigned char> buffer;
         buffer.resize(BLOCK);
         std::uint64_t offset = 0;
-        while (offset < SAMPLE_BYTES && !progress.cancel.load()) {
+        while (offset < progress.sampleBytes && !progress.cancel.load()) {
             const auto desired = static_cast<std::size_t>(
-                std::min<std::uint64_t>(BLOCK, SAMPLE_BYTES - offset));
+                std::min<std::uint64_t>(BLOCK, progress.sampleBytes - offset));
             const std::size_t count = pipe.pull(buffer.data(), desired);
             if (!count) break;
             buffer.resize(count);
@@ -328,6 +330,8 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
             failure = "No HTTP data received";
         else if (progress.written.load() != progress.received.load())
             failure = "Buffer/write byte mismatch";
+        else if (progress.received.load() < progress.sampleBytes)
+            failure = "Source ended before sample size";
         else progress.result = "Complete";
     } catch (const std::exception& e) {
         failure = e.what();
