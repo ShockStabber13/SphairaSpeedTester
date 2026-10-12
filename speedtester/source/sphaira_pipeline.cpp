@@ -228,7 +228,7 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
     std::string failure;
     try {
         if (writeSd) {
-            sd = fsdevGetDeviceFileSystem("sdmc:");
+            sd = fsdevGetDeviceFileSystem("sdmc");
             if (!sd) throw std::runtime_error("SD card filesystem unavailable");
             fsFsDeleteFile(sd, FS_FILE); // previous aborted test, if any
             Result rc = fsFsCreateFile(sd, FS_FILE,
@@ -237,32 +237,55 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
             rc = fsFsOpenFile(sd, FS_FILE, FsOpenMode_Write, &sdFile);
             if (R_FAILED(rc)) throw std::runtime_error("SD open: " + hexResult(rc));
             sdOpened = true;
+            // Commit the preallocated file before asynchronous writes.
+            fsFsCommit(sd);
         }
 
         const auto start = clock_type::now();
         PushPull pipe(progress);
         TwoSlotRing ring;
         std::string writerError;
-        std::thread network([&] { pipe.perform(url); });
+        std::thread network([&] {
+            try {
+                pipe.perform(url);
+            } catch (...) {
+                // Never throw across a std::thread entry point: that would
+                // terminate the entire Switch homebrew application.
+                std::lock_guard<std::mutex> lock(pipe.mutex);
+                pipe.result = CURLE_ABORTED_BY_CALLBACK;
+                pipe.finished = true;
+                pipe.canPull.notify_all();
+            }
+        });
         std::thread writer([&] {
-            std::vector<unsigned char> buffer;
-            buffer.reserve(BLOCK);
-            std::uint64_t offset = 0;
-            while (ring.pop(buffer, offset)) {
-                if (progress.cancel.load()) break;
-                if (writeSd) {
-                    const Result rc = fsFileWrite(&sdFile, static_cast<s64>(offset),
-                                                  buffer.data(), buffer.size(),
-                                                  FsWriteOption_None);
-                    if (R_FAILED(rc)) {
-                        writerError = "SD write: " + hexResult(rc);
-                        progress.cancel.store(true);
-                        ring.abort();
-                        break;
+            try {
+                std::vector<unsigned char> buffer;
+                buffer.reserve(BLOCK);
+                std::uint64_t offset = 0;
+                while (ring.pop(buffer, offset)) {
+                    if (progress.cancel.load()) break;
+                    if (writeSd) {
+                        const Result rc = fsFileWrite(
+                            &sdFile, static_cast<s64>(offset),
+                            buffer.data(), buffer.size(), FsWriteOption_None);
+                        if (R_FAILED(rc)) {
+                            writerError = "SD write: " + hexResult(rc);
+                            progress.cancel.store(true);
+                            ring.abort();
+                            break;
+                        }
                     }
+                    progress.written.fetch_add(buffer.size());
+                    buffer.clear();
                 }
-                progress.written.fetch_add(buffer.size());
-                buffer.clear();
+            } catch (const std::exception& e) {
+                writerError = std::string("Writer: ") + e.what();
+                progress.cancel.store(true);
+                ring.abort();
+            } catch (...) {
+                writerError = "Writer crashed";
+                progress.cancel.store(true);
+                ring.abort();
             }
         });
 
@@ -312,7 +335,10 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
         failure = "Unknown transfer failure";
     }
     if (sdOpened) fsFileClose(&sdFile);
-    if (sd) fsFsDeleteFile(sd, FS_FILE); // never retain a partially sampled game
+    if (sd) {
+        fsFsDeleteFile(sd, FS_FILE); // never retain a partially sampled game
+        fsFsCommit(sd);
+    }
     if (!failure.empty()) progress.result = failure;
     progress.done.store(true);
 }

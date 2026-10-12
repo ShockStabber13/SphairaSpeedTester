@@ -32,3 +32,7 @@ Run the same link twice, once per mode. Real download speed depends on Wi-Fi, pr
 Differences from upstream: console-only UI, no decompression or install, bounded 256 MiB Range request, full TLS certificate verification, optional discard sink, native preallocated SD test file, no automatic resume. This is intended to identify whether those core transfer mechanisms improve speed, not to claim identical behavior to unmodified Sphaira.
 
 Upstream copyright and GPL-3.0 terms are retained. See \`LICENSE\`.
+
+## Diagnosing a Switch crash
+
+The tester writes startup markers to `sdmc:/switch/SphairaSpeedTester/debug.log` (only during setup, start/end, not inside the benchmark hot path). If the NRO closes unexpectedly, check the last marker and the Atmosphere fatal report, if generated. Tell us whether the crash happens **on launch**, after **A (HTTP-only)**, or after **X (HTTP+SD)**. Run through **Homebrew Menu with full RAM** (hold R while launching a game) if applet memory limits are involved. No benchmarks have been measured on actual hardware yet.

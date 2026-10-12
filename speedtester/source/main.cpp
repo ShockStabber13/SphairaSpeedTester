@@ -12,6 +12,12 @@
 namespace {
 constexpr const char* DIR = "sdmc:/switch/SphairaSpeedTester";
 constexpr const char* URL_FILE = "sdmc:/switch/SphairaSpeedTester/url.txt";
+constexpr const char* LOG_FILE = "sdmc:/switch/SphairaSpeedTester/debug.log";
+
+void logStage(const char* stage) {
+    std::ofstream log(LOG_FILE, std::ios::app);
+    if (log) log << stage << '\n';
+}
 
 std::string loadUrl() {
     std::ifstream f(URL_FILE);
@@ -71,6 +77,8 @@ void render(const std::string& url, const tester::Progress* p, bool sd,
 
 int main(int, char**) {
     consoleInit(nullptr);
+    std::printf("Sphaira Speed Tester: starting...\n");
+    consoleUpdate(nullptr);
     const Result socket = socketInitializeDefault();
     if (R_FAILED(socket)) {
         std::printf("Network initialization failed: 0x%08X\n", socket);
@@ -87,19 +95,31 @@ int main(int, char**) {
         consoleExit(nullptr);
         return 1;
     }
-    curl_global_init(CURL_GLOBAL_DEFAULT);
     mkdir(DIR, 0777);
+    logStage("Startup: network initialized");
+    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+        logStage("Startup: curl init FAILED");
+        std::printf("curl initialization failed; press HOME to exit.\n");
+        consoleUpdate(nullptr);
+        for (;;) {
+            svcSleepThread(100000000);
+        }
+    }
+    logStage("Startup: curl initialized");
 
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     PadState pad;
     padInitializeDefault(&pad);
+    logStage("Startup: controllers initialized");
     std::string url = loadUrl();
+    logStage("Startup: URL configuration read");
     std::unique_ptr<tester::Progress> progress;
     std::thread worker;
     bool sd = false, running = true;
     auto lastUi = std::chrono::steady_clock::now();
     auto started = lastUi;
     render(url, nullptr, false);
+    logStage("Startup: ready at main menu");
 
     while (appletMainLoop() && running) {
         padUpdate(&pad);
@@ -118,9 +138,24 @@ int main(int, char**) {
                 progress = std::make_unique<tester::Progress>();
                 started = std::chrono::steady_clock::now();
                 auto* p = progress.get();
-                worker = std::thread([url, sd, p] {
-                    tester::runSample(url, sd, *p);
-                });
+                logStage(sd ? "Sample: started HTTP + SD" :
+                              "Sample: started HTTP only");
+                try {
+                    worker = std::thread([url, sd, p] {
+                        try {
+                            tester::runSample(url, sd, *p);
+                        } catch (const std::exception& e) {
+                            p->result = std::string("Worker: ") + e.what();
+                            p->done.store(true);
+                        } catch (...) {
+                            p->result = "Worker failed unexpectedly";
+                            p->done.store(true);
+                        }
+                    });
+                } catch (const std::exception& e) {
+                    progress->result = std::string("Cannot start test: ") + e.what();
+                    progress->done.store(true);
+                }
             }
         }
         if (std::chrono::steady_clock::now() - lastUi >
@@ -135,6 +170,7 @@ int main(int, char**) {
 
     if (progress && !progress->done.load()) progress->cancel.store(true);
     if (worker.joinable()) worker.join();
+    logStage("Shutdown: normal");
     curl_global_cleanup();
     socketExit();
     consoleExit(nullptr);
