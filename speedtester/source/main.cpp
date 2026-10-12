@@ -33,7 +33,8 @@ std::string hostOnly(const std::string& url) {
 double mib(std::uint64_t bytes) {
     return static_cast<double>(bytes) / (1024.0 * 1024.0);
 }
-void render(const std::string& url, const tester::Progress* p, bool sd) {
+void render(const std::string& url, const tester::Progress* p, bool sd,
+            double runningSeconds = 0) {
     std::printf("\x1b[2J\x1b[H");
     std::printf("SPHAIRA SPEED TESTER v0.1\n");
     std::printf("Sphaira-derived 64 KiB network + 2x4 MiB SD ring\n\n");
@@ -49,13 +50,16 @@ void render(const std::string& url, const tester::Progress* p, bool sd) {
         const auto downloaded = p->received.load();
         const auto saved = p->written.load();
         const auto elapsed = p->elapsedMs.load();
+        const double seconds = (p->done.load() && elapsed)
+            ? elapsed / 1000.0 : runningSeconds;
         std::printf("Mode: %s\n", sd ? "HTTP + SD" : "HTTP only");
-        std::printf("Received: %.1f MiB | Consumed: %.1f MiB\n",
-                    mib(downloaded), mib(saved));
-        if (elapsed)
-            std::printf("Overall: %.2f MiB/s | HTTP: %d\n",
-                        mib(saved) * 1000.0 / elapsed, p->httpCode.load());
-        else std::printf("Current bytes recorded; final speed on completion.\n");
+        std::printf("Received: %.1f MiB (%.0f%%) | Consumed: %.1f MiB\n",
+                    mib(downloaded), 100.0 * downloaded / tester::SAMPLE_BYTES,
+                    mib(saved));
+        if (seconds > 0)
+            std::printf("HTTP: %.2f MiB/s | Pipeline: %.2f MiB/s\n",
+                        mib(downloaded) / seconds, mib(saved) / seconds);
+        std::printf("HTTP status: %d\n", p->httpCode.load());
         if (p->done.load())
             std::printf("\nResult: %s\n\nA/X: another test | +: Exit\n",
                         p->result.c_str());
@@ -94,6 +98,7 @@ int main(int, char**) {
     std::thread worker;
     bool sd = false, running = true;
     auto lastUi = std::chrono::steady_clock::now();
+    auto started = lastUi;
     render(url, nullptr, false);
 
     while (appletMainLoop() && running) {
@@ -111,6 +116,7 @@ int main(int, char**) {
             if (!url.empty()) {
                 sd = (down & HidNpadButton_X) != 0;
                 progress = std::make_unique<tester::Progress>();
+                started = std::chrono::steady_clock::now();
                 auto* p = progress.get();
                 worker = std::thread([url, sd, p] {
                     tester::runSample(url, sd, *p);
@@ -120,11 +126,9 @@ int main(int, char**) {
         if (std::chrono::steady_clock::now() - lastUi >
             std::chrono::milliseconds(250)) {
             lastUi = std::chrono::steady_clock::now();
-            if (progress && !progress->done.load()) {
-                // Live wall-clock elapsed includes network and SD backpressure.
-                // Avoid setting elapsedMs on this thread: worker stores final value.
-            }
-            render(url, progress.get(), sd);
+            const double seconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - started).count();
+            render(url, progress.get(), sd, seconds);
         }
         svcSleepThread(16000000);
     }
