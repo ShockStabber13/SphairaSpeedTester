@@ -73,29 +73,8 @@ endif()
 
 add_executable(sphaira
     source/ui/menus/album_menu.cpp
-    source/ui/menus/album_share_menu.cpp
-    source/ui/menus/appstore.cpp
-    source/ui/menus/ownfoil.cpp
-    source/ui/menus/ownfoil_title.cpp
-    source/ui/menus/file_viewer.cpp
-    source/ui/menus/image_viewer.cpp
-    source/ui/menus/filebrowser.cpp
-    source/ui/menus/file_picker.cpp
-    source/ui/menus/homebrew.cpp
-    source/ui/menus/irs_menu.cpp
     source/ui/menus/main_menu.cpp
     source/ui/menus/menu_base.cpp
-    source/ui/menus/save_menu.cpp
-    source/ui/menus/storage_menu.cpp
-    source/ui/menus/themezer.cpp
-    source/ui/menus/ghdl.cpp
-    source/ui/menus/usb_menu.cpp
-    source/ui/menus/gc_menu.cpp
-    source/ui/menus/game_menu.cpp
-    source/ui/menus/game_meta_menu.cpp
-    source/ui/menus/game_nca_menu.cpp
-    source/ui/menus/grid_menu_base.cpp
-    source/ui/menus/install_stream_menu_base.cpp
 
     source/ui/error_box.cpp
     source/ui/notification.cpp
