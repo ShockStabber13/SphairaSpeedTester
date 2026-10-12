@@ -1,0 +1,69 @@
+name: Build Sphaira Speed Tester
+on:
+  push:
+    branches:
+      - experiment/minimal-speed-tester
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # Content-addressed cache: reuse only when the source + Makefile match.
+      # A changed source or build configuration gets a real rebuild.
+      - name: Reuse verified build
+        id: cached
+        uses: actions/cache@v4
+        with:
+          path: |
+            speedtester/build
+            speedtester/SphairaSpeedTester.nro
+            speedtester/SphairaSpeedTester.elf
+            speedtester/SphairaSpeedTester.nacp
+          key: speedtester-devkitpro-v2-${{ hashFiles('speedtester/Makefile', 'speedtester/source/**', 'speedtester/include/**') }}
+      - name: Build changed sources
+        if: steps.cached.outputs.cache-hit != 'true'
+        run: make -C speedtester -j2
+      - name: Reuse verified startup probe
+        id: probe_cached
+        uses: actions/cache@v4
+        with:
+          path: |
+            startup-probe/build
+            startup-probe/SphairaStartupProbe.nro
+            startup-probe/SphairaStartupProbe.elf
+            startup-probe/SphairaStartupProbe.nacp
+          key: startup-probe-devkitpro-v1-${{ hashFiles('startup-probe/Makefile', 'startup-probe/source/**') }}
+      - name: Build startup probe
+        if: steps.probe_cached.outputs.cache-hit != 'true'
+        run: make -C startup-probe -j2
+      - name: Validate NRO containers and embedded metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+          for name in ("SphairaSpeedTester", "SphairaStartupProbe"):
+              path = Path("speedtester" if "SpeedTester" in name else "startup-probe") / (name + ".nro")
+              blob = path.read_bytes()
+              assert blob[16:20] == b"NRO0", f"{path}: missing NRO0 header"
+              data_end = struct.unpack_from("<I", blob, 0x18)[0]
+              assert 0 < data_end <= len(blob), f"{path}: invalid body size"
+              assert blob[data_end:data_end+4] == b"ASET", f"{path}: missing ASET metadata"
+              print(f"{path}: {len(blob)} bytes, body={data_end}, valid NRO0/ASET")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SphairaSpeedTester-NRO
+          path: speedtester/SphairaSpeedTester.nro
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SphairaStartupProbe-NRO
+          path: startup-probe/SphairaStartupProbe.nro
+          if-no-files-found: error

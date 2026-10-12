@@ -1,0 +1,346 @@
+// Minimal, independently buildable adaptation of Sphaira's original network
+// PushPullThreadData and threaded_file_transfer.cpp ring architecture.
+// Upstream: https://github.com/NaGaa95/sphaira (GPL-3.0)
+// This reproduces the relevant 64 KiB curl push/pull buffer and vector-swapping
+// two-slot 4 MiB writer ring, rather than copying SwitchGamesBrowser's pipeline.
+#include "sphaira_pipeline.hpp"
+#include <switch.h>
+#include <curl/curl.h>
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <condition_variable>
+#include <cstring>
+#include <cstdio>
+#include <mutex>
+#include <stdexcept>
+#include <thread>
+#include <vector>
+
+namespace tester {
+namespace {
+using clock_type = std::chrono::steady_clock;
+constexpr std::size_t NET_BUFFER = 64 * 1024;
+constexpr std::size_t BLOCK = 4 * 1024 * 1024;
+constexpr const char* SD_FILE = "sdmc:/switch/SphairaSpeedTester/sample.part";
+constexpr const char* FS_FILE = "/switch/SphairaSpeedTester/sample.part";
+
+// Sphaira's 64 KiB PushPullThreadData buffering model: curl callback never
+// blocks on the SD writer. Instead it returns CURL_WRITEFUNC_PAUSE when full.
+struct PushPull {
+    std::mutex mutex;
+    std::condition_variable canPull, canWrite;
+    std::vector<unsigned char> buffer;
+    CURL* curl{};
+    Progress& progress;
+    std::uint64_t accepted{};
+    bool finished{};
+    bool intentionalStop{};
+    CURLcode result{CURLE_OK};
+    long responseCode{};
+
+    explicit PushPull(Progress& p) : progress(p) { buffer.reserve(NET_BUFFER); }
+
+    static size_t onWrite(char* ptr, size_t size, size_t nmemb, void* userdata) {
+        auto& self = *static_cast<PushPull*>(userdata);
+        const std::size_t count = size * nmemb;
+        if (!count) return 0;
+        self.progress.bodyCallbacks.fetch_add(1);
+        if (!ptr || self.progress.cancel.load()) return 0;
+
+        std::unique_lock<std::mutex> lock(self.mutex);
+        if (self.accepted >= SAMPLE_BYTES) {
+            self.intentionalStop = true;
+            return 0;
+        }
+        const std::size_t take = static_cast<std::size_t>(
+            std::min<std::uint64_t>(count, SAMPLE_BYTES - self.accepted));
+        if (take > NET_BUFFER) return 0;
+        // The old code paused curl when this 64 KiB buffer was full but had
+        // no reliable resume when the consumer emptied it.
+        // Block the curl write callback until the consumer frees space.
+        while (self.buffer.size() + take > NET_BUFFER &&
+               !self.progress.cancel.load()) {
+            self.canWrite.wait_for(lock, std::chrono::milliseconds(100));
+        }
+        if (self.progress.cancel.load()) return 0;
+        self.buffer.insert(self.buffer.end(),
+                           reinterpret_cast<unsigned char*>(ptr),
+                           reinterpret_cast<unsigned char*>(ptr) + take);
+        self.accepted += take;
+        self.progress.received.fetch_add(take);
+        self.canPull.notify_one();
+        if (take < count) {
+            self.intentionalStop = true; // server ignored Range
+            return 0;
+        }
+        return count;
+    }
+
+    static int onProgress(void* userdata, curl_off_t, curl_off_t,
+                          curl_off_t, curl_off_t) {
+        auto& self = *static_cast<PushPull*>(userdata);
+        return self.progress.cancel.load() ? 1 : 0;
+    }
+
+    std::size_t pull(unsigned char* dst, std::size_t request) {
+        std::unique_lock<std::mutex> lock(mutex);
+        std::size_t copied = 0;
+        while (copied < request) {
+            if (progress.cancel.load()) break;
+            if (buffer.empty()) {
+                if (finished) break;
+                canPull.wait_for(lock, std::chrono::milliseconds(100), [&] {
+                    return !buffer.empty() || finished || progress.cancel.load();
+                });
+                continue;
+            }
+            const auto n = std::min(request - copied, buffer.size());
+            std::memcpy(dst + copied, buffer.data(), n);
+            // Deliberately retain Sphaira's original vector.erase behavior.
+            buffer.erase(buffer.begin(), buffer.begin() + n);
+            copied += n;
+            canWrite.notify_one();
+        }
+        return copied;
+    }
+
+    void perform(const std::string& url) {
+        CURL* h = curl_easy_init();
+        if (!h) {
+            std::lock_guard<std::mutex> lock(mutex);
+            result = CURLE_FAILED_INIT;
+            finished = true;
+            canPull.notify_all();
+            return;
+        }
+        curl = h;
+        const std::string range = "0-" + std::to_string(SAMPLE_BYTES - 1);
+        curl_easy_setopt(h, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(h, CURLOPT_RANGE, range.c_str());
+        curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(h, CURLOPT_MAXREDIRS, 10L);
+        curl_easy_setopt(h, CURLOPT_USERAGENT, "SphairaSpeedTester/0.1");
+        curl_easy_setopt(h, CURLOPT_BUFFERSIZE, static_cast<long>(NET_BUFFER));
+        curl_easy_setopt(h, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, &PushPull::onWrite);
+        curl_easy_setopt(h, CURLOPT_WRITEDATA, this);
+        curl_easy_setopt(h, CURLOPT_XFERINFOFUNCTION, &PushPull::onProgress);
+        curl_easy_setopt(h, CURLOPT_XFERINFODATA, this);
+        curl_easy_setopt(h, CURLOPT_CONNECTTIMEOUT_MS, 15000L);
+        curl_easy_setopt(h, CURLOPT_LOW_SPEED_LIMIT, 1L);
+        curl_easy_setopt(h, CURLOPT_LOW_SPEED_TIME, 20L);
+        curl_easy_setopt(h, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(h, CURLOPT_SSL_VERIFYHOST, 2L);
+        curl_easy_setopt(h, CURLOPT_NOSIGNAL, 1L);
+        const CURLcode code = curl_easy_perform(h);
+        long http = 0;
+        curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &http);
+        curl_off_t downloaded = 0;
+        curl_easy_getinfo(h, CURLINFO_SIZE_DOWNLOAD_T, &downloaded);
+        const char* mime = nullptr;
+        curl_easy_getinfo(h, CURLINFO_CONTENT_TYPE, &mime);
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            result = code;
+            responseCode = http;
+            progress.httpCode.store(static_cast<int>(http));
+            progress.curlCode.store(static_cast<int>(code));
+            progress.curlDownloaded.store(downloaded > 0
+                ? static_cast<std::uint64_t>(downloaded) : 0);
+            progress.contentType = mime ? mime : "(unspecified)";
+            finished = true;
+        }
+        canPull.notify_all();
+        canWrite.notify_all();
+        curl_easy_cleanup(h);
+        curl = nullptr;
+    }
+};
+
+// Sphaira's RingBuf<2> idea: a 4 MiB read buffer swaps with each fixed slot.
+// No per-block heap copy, no dynamic deque allocation in the hot path.
+class TwoSlotRing {
+    struct Slot {
+        std::vector<unsigned char> bytes;
+        std::uint64_t offset{};
+        Slot() { bytes.reserve(BLOCK); }
+    };
+    std::array<Slot, 2> slots;
+    unsigned readIndex{}, writeIndex{}, count{};
+    std::mutex mutex;
+    std::condition_variable canRead, canWrite;
+    bool closed{}, failed{};
+public:
+    bool push(std::vector<unsigned char>& buf, std::uint64_t offset,
+              const Progress& p) {
+        std::unique_lock<std::mutex> lock(mutex);
+        canWrite.wait(lock, [&] {
+            return count < 2 || failed || p.cancel.load();
+        });
+        if (failed || p.cancel.load()) return false;
+        auto& dst = slots[writeIndex];
+        dst.bytes.swap(buf);
+        dst.offset = offset;
+        writeIndex = (writeIndex + 1) % 2;
+        ++count;
+        canRead.notify_one();
+        return true;
+    }
+    bool pop(std::vector<unsigned char>& buf, std::uint64_t& offset) {
+        std::unique_lock<std::mutex> lock(mutex);
+        canRead.wait(lock, [&] { return count || closed || failed; });
+        if (failed || !count) return false;
+        auto& src = slots[readIndex];
+        src.bytes.swap(buf);
+        offset = src.offset;
+        readIndex = (readIndex + 1) % 2;
+        --count;
+        canWrite.notify_one();
+        return true;
+    }
+    void finish() {
+        std::lock_guard<std::mutex> lock(mutex);
+        closed = true;
+        canRead.notify_all();
+        canWrite.notify_all();
+    }
+    void abort() {
+        std::lock_guard<std::mutex> lock(mutex);
+        failed = true;
+        canRead.notify_all();
+        canWrite.notify_all();
+    }
+};
+
+std::string hexResult(Result rc) {
+    char b[32];
+    std::snprintf(b, sizeof(b), "0x%08X", static_cast<unsigned>(rc));
+    return b;
+}
+} // namespace
+
+void runSample(const std::string& url, bool writeSd, Progress& progress) {
+    FsFile sdFile{};
+    FsFileSystem* sd = nullptr;
+    bool sdOpened = false;
+    std::string failure;
+    try {
+        if (writeSd) {
+            sd = fsdevGetDeviceFileSystem("sdmc");
+            if (!sd) throw std::runtime_error("SD card filesystem unavailable");
+            fsFsDeleteFile(sd, FS_FILE); // previous aborted test, if any
+            Result rc = fsFsCreateFile(sd, FS_FILE,
+                                       static_cast<s64>(SAMPLE_BYTES), 0);
+            if (R_FAILED(rc)) throw std::runtime_error("SD allocate: " + hexResult(rc));
+            rc = fsFsOpenFile(sd, FS_FILE, FsOpenMode_Write, &sdFile);
+            if (R_FAILED(rc)) throw std::runtime_error("SD open: " + hexResult(rc));
+            sdOpened = true;
+            // Commit the preallocated file before asynchronous writes.
+            fsFsCommit(sd);
+        }
+
+        const auto start = clock_type::now();
+        PushPull pipe(progress);
+        TwoSlotRing ring;
+        std::string writerError;
+        std::thread network([&] {
+            try {
+                pipe.perform(url);
+            } catch (...) {
+                // Never throw across a std::thread entry point: that would
+                // terminate the entire Switch homebrew application.
+                std::lock_guard<std::mutex> lock(pipe.mutex);
+                pipe.result = CURLE_ABORTED_BY_CALLBACK;
+                pipe.finished = true;
+                pipe.canPull.notify_all();
+            }
+        });
+        std::thread writer([&] {
+            try {
+                std::vector<unsigned char> buffer;
+                buffer.reserve(BLOCK);
+                std::uint64_t offset = 0;
+                while (ring.pop(buffer, offset)) {
+                    if (progress.cancel.load()) break;
+                    if (writeSd) {
+                        const Result rc = fsFileWrite(
+                            &sdFile, static_cast<s64>(offset),
+                            buffer.data(), buffer.size(), FsWriteOption_None);
+                        if (R_FAILED(rc)) {
+                            writerError = "SD write: " + hexResult(rc);
+                            progress.cancel.store(true);
+                            ring.abort();
+                            break;
+                        }
+                    }
+                    progress.written.fetch_add(buffer.size());
+                    buffer.clear();
+                }
+            } catch (const std::exception& e) {
+                writerError = std::string("Writer: ") + e.what();
+                progress.cancel.store(true);
+                ring.abort();
+            } catch (...) {
+                writerError = "Writer crashed";
+                progress.cancel.store(true);
+                ring.abort();
+            }
+        });
+
+        std::vector<unsigned char> buffer;
+        buffer.resize(BLOCK);
+        std::uint64_t offset = 0;
+        while (offset < SAMPLE_BYTES && !progress.cancel.load()) {
+            const auto desired = static_cast<std::size_t>(
+                std::min<std::uint64_t>(BLOCK, SAMPLE_BYTES - offset));
+            const std::size_t count = pipe.pull(buffer.data(), desired);
+            if (!count) break;
+            buffer.resize(count);
+            if (!ring.push(buffer, offset, progress)) break;
+            offset += count;
+            buffer.resize(BLOCK);
+        }
+        ring.finish();
+        writer.join();
+        network.join();
+
+        if (sdOpened) {
+            if (!progress.cancel.load()) {
+                const Result rc = fsFileFlush(&sdFile);
+                if (R_FAILED(rc)) writerError = "SD flush: " + hexResult(rc);
+            }
+            fsFileClose(&sdFile);
+            sdOpened = false;
+        }
+        progress.elapsedMs.store(static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                clock_type::now() - start).count()));
+
+        if (!writerError.empty()) failure = writerError;
+        else if (progress.cancel.load()) failure = "Cancelled";
+        else if (pipe.responseCode != 200 && pipe.responseCode != 206)
+            failure = "HTTP error " + std::to_string(pipe.responseCode);
+        else if (pipe.result != CURLE_OK && !pipe.intentionalStop)
+            failure = std::string("curl: ") + curl_easy_strerror(pipe.result);
+        else if (!progress.received.load())
+            failure = "No HTTP data received";
+        else if (progress.written.load() != progress.received.load())
+            failure = "Buffer/write byte mismatch";
+        else if (progress.received.load() < SAMPLE_BYTES)
+            failure = "Response shorter than test sample";
+        else progress.result = "Complete";
+    } catch (const std::exception& e) {
+        failure = e.what();
+    } catch (...) {
+        failure = "Unknown transfer failure";
+    }
+    if (sdOpened) fsFileClose(&sdFile);
+    if (sd) {
+        fsFsDeleteFile(sd, FS_FILE); // never retain a partially sampled game
+        fsFsCommit(sd);
+    }
+    if (!failure.empty()) progress.result = failure;
+    progress.done.store(true);
+}
+} // namespace tester
