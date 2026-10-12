@@ -1,20 +1,4 @@
-#!/bin/sh
-
-# builds a preset
-build_preset() {
-    echo Configuring $1 ...
-    cmake --preset $1
-    echo Building $1 ...
-    cmake --build --preset $1
-}
-
-build_preset Release
-
-rm -rf out
-
-# --- SWITCH --- #
-mkdir -p out/switch/sphaira/
-cp -r build/Release/*.nro out/switch/sphaira/sphaira.nro
-pushd out
-zip -r9 sphaira.zip switch
-popd
+#!/usr/bin/env bash
+set -euo pipefail
+make -C "$(dirname "$0")/speedtester" -j2
+echo "Output: speedtester/SphairaSpeedTester.nro"
