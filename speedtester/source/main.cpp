@@ -2,7 +2,6 @@
 #include <switch.h>
 #include <curl/curl.h>
 #include <chrono>
-#include <array>
 #include <cstdio>
 #include <cerrno>
 #include <fstream>
@@ -18,8 +17,6 @@ constexpr const char* LOG_FILE = "sdmc:/switch/SphairaSpeedTester/debug.log";
 // Write to the already-present /switch folder so diagnostics survive even
 // when our application's own directory could not be created.
 constexpr const char* ROOT_LOG = "sdmc:/switch/SphairaSpeedTester-startup.log";
-constexpr std::array<std::uint32_t, 4> SAMPLE_MIB{256, 512, 1024, 2048};
-constexpr std::uint64_t MIB = 1024ULL * 1024ULL;
 
 void logStage(const char* stage) {
     for (const char* path : {ROOT_LOG, LOG_FILE}) {
@@ -53,15 +50,12 @@ double mib(std::uint64_t bytes) {
     return static_cast<double>(bytes) / (1024.0 * 1024.0);
 }
 void render(const std::string& url, const tester::Progress* p, bool sd,
-            std::uint32_t sampleMiB, double runningSeconds = 0) {
+            double runningSeconds = 0) {
     std::printf("\x1b[2J\x1b[H");
-    std::printf("SPHAIRA SPEED TESTER v0.2 (diagnostics)\n");
+    std::printf("SPHAIRA SPEED TESTER v0.3 (HTTP fix)\n");
     std::printf("Sphaira-derived 64 KiB network + 2x4 MiB SD ring\n\n");
     std::printf("Source: %s\n", hostOnly(url).c_str());
-    std::printf("Selected sample: %u MiB%s\n",
-                sampleMiB, sampleMiB >= 1024 ? " (long test)" : "");
-    if (!p || p->done.load())
-        std::printf("LEFT / RIGHT: change sample size\n");
+    std::printf("Sample: 256 MiB (HTTP Range 0-268435455)\n");
     std::printf("URL file: /switch/SphairaSpeedTester/url.txt\n\n");
     if (url.empty()) std::printf("Missing URL. Add a direct HTTP(S) link in url.txt.\n\n");
     if (!p) {
@@ -75,17 +69,24 @@ void render(const std::string& url, const tester::Progress* p, bool sd,
         const double seconds = (p->done.load() && elapsed)
             ? elapsed / 1000.0 : runningSeconds;
         std::printf("Mode: %s\n", sd ? "HTTP + SD" : "HTTP only");
-        std::printf("Received: %.1f MiB / %.0f MiB (%.0f%%)\n",
-                    mib(downloaded), mib(p->sampleBytes),
-                    100.0 * downloaded / p->sampleBytes);
-        std::printf("Consumed: %.1f MiB\n", mib(saved));
+        std::printf("Received: %.1f MiB (%.0f%%) | Consumed: %.1f MiB\n",
+                    mib(downloaded), 100.0 * downloaded / tester::SAMPLE_BYTES,
+                    mib(saved));
         if (seconds > 0)
             std::printf("HTTP: %.2f MiB/s | Pipeline: %.2f MiB/s\n",
                         mib(downloaded) / seconds, mib(saved) / seconds);
         std::printf("HTTP status: %d\n", p->httpCode.load());
-        if (p->done.load())
+        std::printf("Body: %llu bytes | Callbacks: %llu\n",
+                    static_cast<unsigned long long>(downloaded),
+                    static_cast<unsigned long long>(p->bodyCallbacks.load()));
+        if (p->done.load()) {
+            std::printf("curl code: %d | curl bytes: %llu\n",
+                        p->curlCode.load(),
+                        static_cast<unsigned long long>(p->curlDownloaded.load()));
+            std::printf("Content-Type: %.48s\n", p->contentType.c_str());
             std::printf("\nResult: %s\n\nA/X: another test | +: Exit\n",
                         p->result.c_str());
+        }
         else std::printf("\nB: Cancel test\n");
     }
     consoleUpdate(nullptr);
@@ -117,10 +118,9 @@ int main(int, char**) {
     std::string startupError;
     std::thread worker;
     bool sd = false, running = true;
-    std::size_t sampleIndex = 2; // 1024 MiB default
     auto lastUi = std::chrono::steady_clock::now();
     auto started = lastUi;
-    render(url, nullptr, false, SAMPLE_MIB[sampleIndex]);
+    render(url, nullptr, false);
     logStage("Startup: ready at main menu");
 
     while (appletMainLoop() && running) {
@@ -129,12 +129,6 @@ int main(int, char**) {
         if (progress && progress->done.load() && worker.joinable()) worker.join();
         if ((down & HidNpadButton_Plus) && (!progress || progress->done.load())) {
             running = false;
-        } else if ((!progress || progress->done.load()) &&
-                   (down & (HidNpadButton_Left | HidNpadButton_Right))) {
-            if (down & HidNpadButton_Left)
-                sampleIndex = (sampleIndex + SAMPLE_MIB.size() - 1) % SAMPLE_MIB.size();
-            else
-                sampleIndex = (sampleIndex + 1) % SAMPLE_MIB.size();
         } else if ((down & HidNpadButton_B) && progress && !progress->done.load()) {
             progress->cancel.store(true);
         } else if ((down & (HidNpadButton_A | HidNpadButton_X)) &&
@@ -167,7 +161,6 @@ int main(int, char**) {
                 }
                 sd = (down & HidNpadButton_X) != 0;
                 progress = std::make_unique<tester::Progress>();
-                progress->sampleBytes = static_cast<std::uint64_t>(SAMPLE_MIB[sampleIndex]) * MIB;
                 started = std::chrono::steady_clock::now();
                 auto* p = progress.get();
                 logStage(sd ? "Sample: started HTTP + SD" :
@@ -195,7 +188,7 @@ int main(int, char**) {
             lastUi = std::chrono::steady_clock::now();
             const double seconds = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - started).count();
-            render(url, progress.get(), sd, SAMPLE_MIB[sampleIndex], seconds);
+            render(url, progress.get(), sd, seconds);
             if (!startupError.empty()) {
                 std::printf("\nNetwork initialization: %s\n", startupError.c_str());
                 consoleUpdate(nullptr);

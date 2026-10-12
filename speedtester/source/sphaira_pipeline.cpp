@@ -29,7 +29,7 @@ constexpr const char* FS_FILE = "/switch/SphairaSpeedTester/sample.part";
 // blocks on the SD writer. Instead it returns CURL_WRITEFUNC_PAUSE when full.
 struct PushPull {
     std::mutex mutex;
-    std::condition_variable canPull;
+    std::condition_variable canPull, canWrite;
     std::vector<unsigned char> buffer;
     CURL* curl{};
     Progress& progress;
@@ -44,54 +44,43 @@ struct PushPull {
     static size_t onWrite(char* ptr, size_t size, size_t nmemb, void* userdata) {
         auto& self = *static_cast<PushPull*>(userdata);
         const std::size_t count = size * nmemb;
-        if (!ptr || !count || self.progress.cancel.load()) return 0;
-        std::lock_guard<std::mutex> lock(self.mutex);
-        if (self.accepted >= self.progress.sampleBytes) {
-            self.intentionalStop = true; // server ignored Range; sample done
-            return 0;
-        }
-        const auto space = self.progress.sampleBytes - self.accepted;
-        if (count > space) {
-            // Last callback crossed the requested sample boundary. curl treats
-            // a short callback as an error; record the deliberate sample stop.
-            const std::size_t take = static_cast<std::size_t>(space);
-            if (take > NET_BUFFER - self.buffer.size())
-                return CURL_WRITEFUNC_PAUSE;
-            self.buffer.insert(self.buffer.end(),
-                               reinterpret_cast<unsigned char*>(ptr),
-                               reinterpret_cast<unsigned char*>(ptr) + take);
-            self.accepted += take;
-            self.progress.received.fetch_add(take);
+        if (!count) return 0;
+        self.progress.bodyCallbacks.fetch_add(1);
+        if (!ptr || self.progress.cancel.load()) return 0;
+
+        std::unique_lock<std::mutex> lock(self.mutex);
+        if (self.accepted >= SAMPLE_BYTES) {
             self.intentionalStop = true;
-            self.canPull.notify_one();
             return 0;
         }
-        if (count > NET_BUFFER - self.buffer.size())
-            return CURL_WRITEFUNC_PAUSE;
+        const std::size_t take = static_cast<std::size_t>(
+            std::min<std::uint64_t>(count, SAMPLE_BYTES - self.accepted));
+        if (take > NET_BUFFER) return 0;
+        // The old code paused curl when this 64 KiB buffer was full but had
+        // no reliable resume when the consumer emptied it.
+        // Block the curl write callback until the consumer frees space.
+        while (self.buffer.size() + take > NET_BUFFER &&
+               !self.progress.cancel.load()) {
+            self.canWrite.wait_for(lock, std::chrono::milliseconds(100));
+        }
+        if (self.progress.cancel.load()) return 0;
         self.buffer.insert(self.buffer.end(),
                            reinterpret_cast<unsigned char*>(ptr),
-                           reinterpret_cast<unsigned char*>(ptr) + count);
-        self.accepted += count;
-        self.progress.received.fetch_add(count);
+                           reinterpret_cast<unsigned char*>(ptr) + take);
+        self.accepted += take;
+        self.progress.received.fetch_add(take);
         self.canPull.notify_one();
+        if (take < count) {
+            self.intentionalStop = true; // server ignored Range
+            return 0;
+        }
         return count;
     }
 
-    // Mirrors Sphaira's pause/unpause from the curl progress callback.
-    static int onProgress(void* userdata, curl_off_t, curl_off_t downloaded,
+    static int onProgress(void* userdata, curl_off_t, curl_off_t,
                           curl_off_t, curl_off_t) {
         auto& self = *static_cast<PushPull*>(userdata);
-        if (self.progress.cancel.load()) return 1;
-        if (!downloaded) return 0;
-        bool pause;
-        {
-            std::lock_guard<std::mutex> lock(self.mutex);
-            pause = self.buffer.size() >= NET_BUFFER;
-        }
-        // Never call curl_easy_pause while holding the buffer mutex; unpause
-        // can synchronously re-enter the curl write callback.
-        return curl_easy_pause(self.curl, pause ? CURLPAUSE_ALL : CURLPAUSE_CONT)
-                   == CURLE_OK ? 0 : 1;
+        return self.progress.cancel.load() ? 1 : 0;
     }
 
     std::size_t pull(unsigned char* dst, std::size_t request) {
@@ -111,6 +100,7 @@ struct PushPull {
             // Deliberately retain Sphaira's original vector.erase behavior.
             buffer.erase(buffer.begin(), buffer.begin() + n);
             copied += n;
+            canWrite.notify_one();
         }
         return copied;
     }
@@ -125,7 +115,7 @@ struct PushPull {
             return;
         }
         curl = h;
-        const std::string range = "0-" + std::to_string(progress.sampleBytes - 1);
+        const std::string range = "0-" + std::to_string(SAMPLE_BYTES - 1);
         curl_easy_setopt(h, CURLOPT_URL, url.c_str());
         curl_easy_setopt(h, CURLOPT_RANGE, range.c_str());
         curl_easy_setopt(h, CURLOPT_FOLLOWLOCATION, 1L);
@@ -146,14 +136,23 @@ struct PushPull {
         const CURLcode code = curl_easy_perform(h);
         long http = 0;
         curl_easy_getinfo(h, CURLINFO_RESPONSE_CODE, &http);
+        curl_off_t downloaded = 0;
+        curl_easy_getinfo(h, CURLINFO_SIZE_DOWNLOAD_T, &downloaded);
+        const char* mime = nullptr;
+        curl_easy_getinfo(h, CURLINFO_CONTENT_TYPE, &mime);
         {
             std::lock_guard<std::mutex> lock(mutex);
             result = code;
             responseCode = http;
             progress.httpCode.store(static_cast<int>(http));
+            progress.curlCode.store(static_cast<int>(code));
+            progress.curlDownloaded.store(downloaded > 0
+                ? static_cast<std::uint64_t>(downloaded) : 0);
+            progress.contentType = mime ? mime : "(unspecified)";
             finished = true;
         }
         canPull.notify_all();
+        canWrite.notify_all();
         curl_easy_cleanup(h);
         curl = nullptr;
     }
@@ -227,14 +226,12 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
     bool sdOpened = false;
     std::string failure;
     try {
-        if (progress.sampleBytes < BLOCK || progress.sampleBytes > (2048ULL * 1024 * 1024))
-            throw std::runtime_error("Invalid sample length");
         if (writeSd) {
             sd = fsdevGetDeviceFileSystem("sdmc");
             if (!sd) throw std::runtime_error("SD card filesystem unavailable");
             fsFsDeleteFile(sd, FS_FILE); // previous aborted test, if any
             Result rc = fsFsCreateFile(sd, FS_FILE,
-                                       static_cast<s64>(progress.sampleBytes), 0);
+                                       static_cast<s64>(SAMPLE_BYTES), 0);
             if (R_FAILED(rc)) throw std::runtime_error("SD allocate: " + hexResult(rc));
             rc = fsFsOpenFile(sd, FS_FILE, FsOpenMode_Write, &sdFile);
             if (R_FAILED(rc)) throw std::runtime_error("SD open: " + hexResult(rc));
@@ -294,9 +291,9 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
         std::vector<unsigned char> buffer;
         buffer.resize(BLOCK);
         std::uint64_t offset = 0;
-        while (offset < progress.sampleBytes && !progress.cancel.load()) {
+        while (offset < SAMPLE_BYTES && !progress.cancel.load()) {
             const auto desired = static_cast<std::size_t>(
-                std::min<std::uint64_t>(BLOCK, progress.sampleBytes - offset));
+                std::min<std::uint64_t>(BLOCK, SAMPLE_BYTES - offset));
             const std::size_t count = pipe.pull(buffer.data(), desired);
             if (!count) break;
             buffer.resize(count);
@@ -330,8 +327,8 @@ void runSample(const std::string& url, bool writeSd, Progress& progress) {
             failure = "No HTTP data received";
         else if (progress.written.load() != progress.received.load())
             failure = "Buffer/write byte mismatch";
-        else if (progress.received.load() < progress.sampleBytes)
-            failure = "Source ended before sample size";
+        else if (progress.received.load() < SAMPLE_BYTES)
+            failure = "Response shorter than test sample";
         else progress.result = "Complete";
     } catch (const std::exception& e) {
         failure = e.what();

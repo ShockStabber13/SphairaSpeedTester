@@ -52,6 +52,6 @@ The main tester now writes \`sdmc:/switch/SphairaSpeedTester-startup.log\` **bef
 
 Use the distinct probe filename and main tester filename; don't overwrite one with the other. If the probe itself closes immediately and produces no root log, the problem is at or before minimal homebrew initialization.
 
-## Longer, selectable benchmark size
+## Receive buffer deadlock and exact diagnostics
 
-Use **Left/Right** on the idle menu to select **256 MiB / 512 MiB / 1024 MiB / 2048 MiB**. The default is **1024 MiB (1 GiB)**, which normally runs about four times longer than the old 256 MiB test at the same transfer speed. Both A (HTTP only) and X (HTTP + SD) use the selected size and show live MiB/s. The source file must contain at least as many bytes as the chosen size for a complete sample. SD mode temporarily preallocates that much free SD space, then deletes its sample file. Network/staging RAM buffer sizes are unchanged.\n
+Restored the 256 MiB sample while fixing the stalled network callback. The 64 KiB receive buffer now blocks the network callback until the consumer frees space, waking it with a condition variable; no libcurl pause/resume transitions are used. The screen shows exact accepted bytes, number of body callbacks, curl result code, curl reported bytes, and Content-Type after completion. The device's tests should use an authorized **resolved AllDebrid direct file URL**, not an API/website page. In particular, HTTP 200 with a small HTML/JSON body is not proof of downloading the intended file.\n
