@@ -43,6 +43,8 @@ jobs:
         run: cmake --preset Lite -DLTO=OFF
       - name: Incremental compile (upstream sources)
         run: cmake --build --preset Lite --parallel 4
+      - name: Audit real compiler header dependencies
+        run: python3 tools/prune_unused_headers.py
       - name: Package and verify NRO
         run: |
           cp build/Lite/sphaira.nro build/Lite/SphairaSpeedTester.nro
