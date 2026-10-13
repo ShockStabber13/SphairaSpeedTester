@@ -35,6 +35,12 @@ option(ENABLE_DEVOPTAB_WEBDAV "Disabled in minimal speed tester" OFF)
 # it also adds 230k to binary size, and i don't think anyone will use it.
 option(ENABLE_DEVOPTAB_SFTP "Disabled in minimal speed tester" OFF)
 
+
+# This branch builds only the dedicated benchmark, not optional Sphaira services.
+foreach(feature ENABLE_NVJPG ENABLE_NSZ ENABLE_LIBUSBHSFS ENABLE_NTFS ENABLE_EXT4 ENABLE_LIBUSBDVD ENABLE_FTPSRV ENABLE_LIBHAZE ENABLE_AUDIO_MP3 ENABLE_AUDIO_OGG ENABLE_AUDIO_WAV ENABLE_AUDIO_FLAC ENABLE_DEVOPTAB_HTTP ENABLE_DEVOPTAB_NFS ENABLE_DEVOPTAB_SMB2 ENABLE_DEVOPTAB_FTP ENABLE_DEVOPTAB_WEBDAV ENABLE_DEVOPTAB_SFTP)
+    set(${feature} OFF CACHE BOOL "Disabled: benchmark-only build" FORCE)
+endforeach()
+
 set(sphaira_VERSION 1.0.7)
 
 project(sphaira

@@ -80,8 +80,12 @@ App::App(const char*) {
     set(ThemeEntryID_PROGRESSBAR_BACKGROUND,11,21,25);
     set(ThemeEntryID_HIGHLIGHT_1,105,255,143);
     set(ThemeEntryID_HIGHLIGHT_2,92,190,255);
+    // Original Sphaira constructor drops the init-phase CPU boost here.
+    App::SetBoostMode(false);
 }
 App::~App() {
+    // Match original destructor's boost reference until userAppExit.
+    App::SetBoostMode(true);
     while (!m_widgets.empty()) m_widgets.pop_back();
     if (vg) nvgDeleteDk(vg);
     renderer.reset();
