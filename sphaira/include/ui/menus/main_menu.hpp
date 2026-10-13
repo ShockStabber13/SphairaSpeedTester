@@ -1,22 +1,85 @@
 #pragma once
+
 #include "ui/widget.hpp"
+#include "ui/menus/menu_base.hpp"
+#include "fs.hpp"
 #include <span>
-#include <string>
 
 namespace sphaira::ui::menu::main {
-// The known-good main_menu.cpp exports an empty registry; no Sphaira tabs.
-struct MiscMenuEntry {};
+
+enum class UpdateState {
+    // still downloading json from github
+    Pending,
+    // no update available.
+    None,
+    // update available!
+    Update,
+    // there was an error whilst checking for updates.
+    Error,
+};
+
+using MiscMenuFunction = std::function<std::unique_ptr<MenuBase>(u32 flags)>;
+
+enum MiscMenuFlag : u8 {
+    // can be set as the rightside menu.
+    MiscMenuFlag_Shortcut = 1 << 0,
+    // needs install option to be enabled.
+    MiscMenuFlag_Install = 1 << 1,
+};
+
+struct MiscMenuEntry {
+    const char* name;
+    const char* title;
+    MiscMenuFunction func;
+    u8 flag;
+    const char* info;
+
+    auto IsShortcut() const -> bool {
+        return flag & MiscMenuFlag_Shortcut;
+    }
+
+    auto IsInstall() const -> bool {
+        return flag & MiscMenuFlag_Install;
+    }
+};
+
 auto GetMenuMenuEntries() -> std::span<const MiscMenuEntry>;
+
+// this holds 2 menus and allows for switching between them
 struct MainMenu final : Widget {
     MainMenu();
     ~MainMenu();
-    void Update(Controller*, TouchInfo*) override;
-    void Draw(NVGcontext*, Theme*) override;
+
+    void Update(Controller* controller, TouchInfo* touch) override;
+    void Draw(NVGcontext* vg, Theme* theme) override;
     void OnFocusGained() override;
     void OnFocusLost() override;
-    bool IsMenu() const override { return true; }
+
+    auto IsMenu() const -> bool override {
+        return true;
+    }
+
 private:
+    void OnLRPress(MenuBase* menu, Button b);
+    void AddOnLRPress();
+    void CheckForUpdates(bool show_result);
+    auto ParseUpdateMetadata(const fs::FsPath& path) -> bool;
+    void ShowUpdateInfo();
+    void StartUpdateInstall();
+
+private:
+    std::unique_ptr<MenuBase> m_centre_menu{};
+    std::unique_ptr<MenuBase> m_left_menu{};
+    std::unique_ptr<MenuBase> m_right_menu{};
+    MenuBase* m_current_menu{};
+
     std::string m_url_host{};
     std::string m_last_result{};
+    std::string m_update_url{};
+    std::string m_update_version{};
+    std::string m_update_description{};
+    UpdateState m_update_state{UpdateState::Pending};
+    u64 m_update_generation{};
 };
+
 } // namespace sphaira::ui::menu::main
