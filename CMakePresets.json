@@ -15,35 +15,35 @@
         {
             "name": "Release",
             "displayName": "Release",
-            "inherits":["core"],
+            "inherits": [
+                "Lite"
+            ],
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "MinSizeRel",
-                "LTO": true
+                "LTO": false
             }
         },
         {
             "name": "Lite",
             "displayName": "Lite",
-            "inherits":["core"],
+            "inherits": [
+                "core"
+            ],
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "MinSizeRel",
-                "LTO": true,
-
+                "LTO": false,
                 "ENABLE_NVJPG": false,
                 "ENABLE_NSZ": false,
-
                 "ENABLE_LIBUSBHSFS": false,
                 "ENABLE_NTFS": false,
                 "ENABLE_EXT4": false,
                 "ENABLE_LIBUSBDVD": false,
                 "ENABLE_FTPSRV": false,
                 "ENABLE_LIBHAZE": false,
-
                 "ENABLE_AUDIO_MP3": false,
                 "ENABLE_AUDIO_OGG": false,
                 "ENABLE_AUDIO_WAV": false,
                 "ENABLE_AUDIO_FLAC": false,
-
                 "ENABLE_DEVOPTAB_HTTP": false,
                 "ENABLE_DEVOPTAB_NFS": false,
                 "ENABLE_DEVOPTAB_SMB2": false,
@@ -55,7 +55,9 @@
         {
             "name": "Dev",
             "displayName": "Dev",
-            "inherits":["core"],
+            "inherits": [
+                "Lite"
+            ],
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "MinSizeRel",
                 "LTO": false,

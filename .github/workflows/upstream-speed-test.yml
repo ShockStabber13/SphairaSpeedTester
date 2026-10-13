@@ -1,7 +1,7 @@
 name: Sphaira original-engine speed test
 on:
   push:
-    branches: [experiment/upstream-engine-benchmark]
+    branches: [benchmark/known-good-9mbs]
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,6 +12,16 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+      - name: Verify original benchmark and transfer code are unchanged
+        run: |
+          test "$(git hash-object sphaira/source/speed_test.cpp)" = "803cd2440397c07e4ff01e9f442e8c61e3deb2da"
+          test "$(git hash-object sphaira/source/yati/source/http.cpp)" = "b3b1bbddce3ed80b62a721ffbb5d81439e2ebcca"
+          test "$(git hash-object sphaira/source/threaded_file_transfer.cpp)" = "b865aab1dad869b2964e5d0b9e864645ce568f3d"
+          test "$(git hash-object sphaira/source/utils/devoptab_common.cpp)" = "559b103f40efe511e0208dc6c687312bb68ad391"
+          test "$(git hash-object sphaira/source/ui/progress_box.cpp)" = "7157686c8f369c8fda86630a8c26dff0c1d451c2"
+          test "$(git hash-object sphaira/source/ui/option_box.cpp)" = "19b648cd752bcb4a42a7f9dfa5530cf1aa207a90"
+          test "$(git hash-object sphaira/source/ui/menus/main_menu.cpp)" = "9b74626fdff2878910ee4fb9a5abdb597cc5ee85"
+          test ! -d assets/romfs/assoc
       - name: Original Sphaira dependencies
         run: |
           apt-get update && apt-get install -y texinfo
@@ -25,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/Lite
-          key: upstream-test-lite-v1-${{ github.sha }}
+          key: minimal-speed-test-lite-v1-${{ github.sha }}
           restore-keys: |
             upstream-test-lite-v1-
       - name: Configure upstream Sphaira Lite
