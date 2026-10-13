@@ -92,10 +92,13 @@ add_executable(sphaira
     source/ui/widget.cpp
     source/ui/list.cpp
     source/ui/scrolling_text.cpp
+    source/ui/music_player.cpp
+    source/ui/forwarder_editor.cpp
     source/ui/steamgriddb_icon.cpp
 
     source/app.cpp
     source/download.cpp
+    source/dumper.cpp
     source/option.cpp
     source/evman.cpp
     source/fs.cpp
@@ -109,6 +112,7 @@ add_executable(sphaira
     source/nro.cpp
     source/nxlink.cpp
     source/qrcode.cpp
+    source/owo.cpp
     source/swkbd.cpp
     source/web.cpp
     source/hasher.cpp
@@ -134,15 +138,35 @@ add_executable(sphaira
     source/utils/devoptab_fatfs.cpp
     source/utils/devoptab_mounts.cpp
     source/utils/devoptab.cpp
+    source/utils/ownfoil.cpp
+    source/utils/ownfoil_discovery.cpp
+    source/utils/ownfoil_api.cpp
+    source/utils/ownfoil_installed.cpp
 
+    source/usb/base.cpp
+    source/usb/usbds.cpp
+    source/usb/usbhs.cpp
+    source/usb/usb_uploader.cpp
+    source/usb/usb_installer.cpp
+    source/usb/usb_dumper.cpp
 
     source/yati/yati.cpp
+    source/yati/container/nsp.cpp
+    source/yati/container/xci.cpp
     source/yati/source/file.cpp
     source/yati/source/http.cpp
     source/yati/source/stream.cpp
     source/yati/source/stream_file.cpp
 
+    source/yati/nx/es.cpp
+    source/yati/nx/keys.cpp
+    source/yati/nx/nca.cpp
+    source/yati/nx/ncz.cpp
+    source/yati/nx/ncm.cpp
+    source/yati/nx/ns.cpp
 
+    source/yati/nx/nxdumptool_rsa.c
+    source/yati/nx/nxdumptool/save.c
 )
 
 target_compile_definitions(sphaira PRIVATE
