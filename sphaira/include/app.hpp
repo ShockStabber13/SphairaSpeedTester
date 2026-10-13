@@ -91,6 +91,7 @@ private:
     std::array<char,0x80> m_emummc_file{};
     std::array<char,0x80> m_emummc_nintendo{};
     bool m_quit{};
+    bool m_curl_initialized{};
     void createFramebufferResources();
     void destroyFramebufferResources();
     void recordStaticCommands();

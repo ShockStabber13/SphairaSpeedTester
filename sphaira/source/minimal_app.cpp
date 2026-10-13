@@ -6,6 +6,7 @@
 #include "ui/nvg_util.hpp"
 #include "log.hpp"
 #include <nanovg_dk.h>
+#include <curl/curl.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -20,6 +21,8 @@ int g_screen_refs{};
 }
 App::App(const char*) {
     g_app = this;
+    // Preserve Sphaira's explicit libcurl initialization before the HTTP test.
+    m_curl_initialized = (curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK);
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&m_pad);
 
@@ -94,6 +97,7 @@ App::~App() {
     pool_code.reset();
     pool_images.reset();
     i18n::exit();
+    if (m_curl_initialized) curl_global_cleanup();
     romfsExit();
     g_app = nullptr;
 }
