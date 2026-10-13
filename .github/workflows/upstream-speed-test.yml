@@ -1,7 +1,7 @@
 name: Sphaira original-engine speed test
 on:
   push:
-    branches: [benchmark/known-good-9mbs]
+    branches: [main, benchmark/known-good-9mbs]
   workflow_dispatch:
 permissions:
   contents: read
