@@ -43,6 +43,8 @@ jobs:
         run: cmake --preset Lite -DLTO=OFF
       - name: Incremental compile (upstream sources)
         run: cmake --build --preset Lite --parallel 4
+      - name: Audit unused UI files against actual compiler dependencies
+        run: python3 tools/ui_file_audit.py
       - name: Package and verify NRO
         run: |
           cp build/Lite/sphaira.nro build/Lite/SphairaSpeedTester.nro

@@ -35,6 +35,10 @@ option(ENABLE_DEVOPTAB_WEBDAV "" ON)
 # it also adds 230k to binary size, and i don't think anyone will use it.
 option(ENABLE_DEVOPTAB_SFTP "" OFF)
 
+# Speed tester has no FTP/MTP menus. This does not affect Lite startup.
+set(ENABLE_FTPSRV OFF CACHE BOOL "Unused in speed tester" FORCE)
+set(ENABLE_LIBHAZE OFF CACHE BOOL "Unused in speed tester" FORCE)
+
 set(sphaira_VERSION 1.0.7)
 
 project(sphaira
