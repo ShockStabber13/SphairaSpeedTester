@@ -76,7 +76,7 @@ else()
 endif()
 
 add_executable(sphaira
-    source/ui/menus/album_menu.cpp
+
     source/ui/menus/main_menu.cpp
     source/ui/menus/menu_base.cpp
 
@@ -92,13 +92,10 @@ add_executable(sphaira
     source/ui/widget.cpp
     source/ui/list.cpp
     source/ui/scrolling_text.cpp
-    source/ui/music_player.cpp
-    source/ui/forwarder_editor.cpp
-    source/ui/steamgriddb_icon.cpp
 
     source/app.cpp
     source/download.cpp
-    source/dumper.cpp
+
     source/option.cpp
     source/evman.cpp
     source/fs.cpp
@@ -107,12 +104,12 @@ add_executable(sphaira
     source/log.cpp
     source/main.cpp
     source/speed_test.cpp
-    source/album_caps.cpp
-    source/album_server.cpp
+    source/speed_test_feature_stubs.cpp
+
     source/nro.cpp
     source/nxlink.cpp
     source/qrcode.cpp
-    source/owo.cpp
+
     source/swkbd.cpp
     source/web.cpp
     source/hasher.cpp
@@ -120,53 +117,25 @@ add_executable(sphaira
     source/threaded_file_transfer.cpp
     source/title_info.cpp
     source/minizip_helper.cpp
-    source/msp.cpp
+
     source/nx_versions.cpp
 
     source/utils/utils.cpp
-    source/utils/audio.cpp
+
     source/utils/devoptab_common.cpp
     source/utils/devoptab_romfs.cpp
     source/utils/devoptab_save.cpp
-    source/utils/devoptab_nro.cpp
-    source/utils/devoptab_nca.cpp
-    source/utils/devoptab_nsp.cpp
-    source/utils/devoptab_xci.cpp
-    source/utils/devoptab_zip.cpp
-    source/utils/devoptab_bfsar.cpp
+
     source/utils/devoptab_vfs.cpp
     source/utils/devoptab_fatfs.cpp
     source/utils/devoptab_mounts.cpp
     source/utils/devoptab.cpp
-    source/utils/ownfoil.cpp
-    source/utils/ownfoil_discovery.cpp
-    source/utils/ownfoil_api.cpp
-    source/utils/ownfoil_installed.cpp
 
-    source/usb/base.cpp
-    source/usb/usbds.cpp
-    source/usb/usbhs.cpp
-    source/usb/usb_uploader.cpp
-    source/usb/usb_installer.cpp
-    source/usb/usb_dumper.cpp
-
-    source/yati/yati.cpp
-    source/yati/container/nsp.cpp
-    source/yati/container/xci.cpp
     source/yati/source/file.cpp
     source/yati/source/http.cpp
     source/yati/source/stream.cpp
     source/yati/source/stream_file.cpp
 
-    source/yati/nx/es.cpp
-    source/yati/nx/keys.cpp
-    source/yati/nx/nca.cpp
-    source/yati/nx/ncz.cpp
-    source/yati/nx/ncm.cpp
-    source/yati/nx/ns.cpp
-
-    source/yati/nx/nxdumptool_rsa.c
-    source/yati/nx/nxdumptool/save.c
 )
 
 target_compile_definitions(sphaira PRIVATE
@@ -426,7 +395,7 @@ if (ENABLE_FTPSRV)
     target_link_libraries(sphaira PRIVATE ftpsrv_helper)
 
     target_sources(sphaira PRIVATE
-        source/ftpsrv_helper.cpp
+
         source/ui/menus/ftp_menu.cpp
     )
 endif()
@@ -442,7 +411,7 @@ if (ENABLE_LIBHAZE)
     target_link_libraries(sphaira PRIVATE haze)
 
     target_sources(sphaira PRIVATE
-        source/haze_helper.cpp
+
         source/ui/menus/mtp_menu.cpp
     )
 endif()
