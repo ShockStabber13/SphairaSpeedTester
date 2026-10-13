@@ -1,39 +1,39 @@
 cmake_minimum_required(VERSION 3.13)
 
 # generic options.
-option(ENABLE_NVJPG "" OFF)
-option(ENABLE_NSZ "enables exporting to nsz" ON)
+option(ENABLE_NVJPG "Disabled in minimal speed tester" OFF)
+option(ENABLE_NSZ "Disabled in minimal speed tester" OFF)
 
 # lib options.
-option(ENABLE_LIBUSBHSFS "enables FAT/exFAT hdd mounting" ON)
+option(ENABLE_LIBUSBHSFS "Disabled in minimal speed tester" OFF)
 # ntfs is provided by ntfs-3g (GPLv2+, compatible with sphaira's GPLv3).
 # needs the portlib: (dkp-)pacman -S switch-ntfs-3g
-option(ENABLE_NTFS "enables NTFS hdd mounting, requires switch-ntfs-3g" ON)
+option(ENABLE_NTFS "Disabled in minimal speed tester" OFF)
 # ext is provided by lwext4 (GPLv2). off by default, it adds a lot to the final
 # binary size and next to no usb hdd is formatted with it.
 # needs the portlib: (dkp-)pacman -S switch-lwext4
-option(ENABLE_EXT4 "enables EXT2/3/4 hdd mounting, requires switch-lwext4" OFF)
-option(ENABLE_LIBUSBDVD "enables cd/dvd/iso/cue mounting" ON)
-option(ENABLE_FTPSRV "enables MTP server support" ON)
-option(ENABLE_LIBHAZE "enables MTP server support" ON)
+option(ENABLE_EXT4 "Disabled in minimal speed tester" OFF)
+option(ENABLE_LIBUSBDVD "Disabled in minimal speed tester" OFF)
+option(ENABLE_FTPSRV "Disabled in minimal speed tester" OFF)
+option(ENABLE_LIBHAZE "Disabled in minimal speed tester" OFF)
 
 # audio options.
-option(ENABLE_AUDIO_MP3 "" ON)
-option(ENABLE_AUDIO_OGG "" ON)
-option(ENABLE_AUDIO_WAV "" ON)
-option(ENABLE_AUDIO_FLAC "" ON)
+option(ENABLE_AUDIO_MP3 "Disabled in minimal speed tester" OFF)
+option(ENABLE_AUDIO_OGG "Disabled in minimal speed tester" OFF)
+option(ENABLE_AUDIO_WAV "Disabled in minimal speed tester" OFF)
+option(ENABLE_AUDIO_FLAC "Disabled in minimal speed tester" OFF)
 
 # devoptab options.
-option(ENABLE_DEVOPTAB_HTTP "" ON)
-option(ENABLE_DEVOPTAB_NFS "" ON)
-option(ENABLE_DEVOPTAB_SMB2 "" ON)
-option(ENABLE_DEVOPTAB_FTP "" ON)
-option(ENABLE_DEVOPTAB_WEBDAV "" ON)
+option(ENABLE_DEVOPTAB_HTTP "Disabled in minimal speed tester" OFF)
+option(ENABLE_DEVOPTAB_NFS "Disabled in minimal speed tester" OFF)
+option(ENABLE_DEVOPTAB_SMB2 "Disabled in minimal speed tester" OFF)
+option(ENABLE_DEVOPTAB_FTP "Disabled in minimal speed tester" OFF)
+option(ENABLE_DEVOPTAB_WEBDAV "Disabled in minimal speed tester" OFF)
 # disable by default because we are CPU bound for upload/download.
 # max speed is 8MiB/s, which is fine for wifi, but awful for ethernet.
 # other clients get 36-40MiB/s.
 # it also adds 230k to binary size, and i don't think anyone will use it.
-option(ENABLE_DEVOPTAB_SFTP "" OFF)
+option(ENABLE_DEVOPTAB_SFTP "Disabled in minimal speed tester" OFF)
 
 set(sphaira_VERSION 1.0.7)
 
@@ -72,98 +72,26 @@ else()
 endif()
 
 add_executable(sphaira
-    source/ui/menus/album_menu.cpp
-    source/ui/menus/main_menu.cpp
-    source/ui/menus/menu_base.cpp
-
-    source/ui/error_box.cpp
-    source/ui/notification.cpp
-    source/ui/nvg_util.cpp
-    source/ui/option_box.cpp
-    source/ui/popup_list.cpp
-    source/ui/popup_multi_select.cpp
-    source/ui/progress_box.cpp
-    source/ui/scrollable_text.cpp
-    source/ui/sidebar.cpp
-    source/ui/widget.cpp
-    source/ui/list.cpp
-    source/ui/scrolling_text.cpp
-    source/ui/music_player.cpp
-    source/ui/forwarder_editor.cpp
-    source/ui/steamgriddb_icon.cpp
-
-    source/app.cpp
-    source/download.cpp
-    source/dumper.cpp
-    source/option.cpp
-    source/evman.cpp
-    source/fs.cpp
-    source/image.cpp
-    source/location.cpp
-    source/log.cpp
     source/main.cpp
     source/speed_test.cpp
-    source/album_caps.cpp
-    source/album_server.cpp
-    source/nro.cpp
-    source/nxlink.cpp
-    source/qrcode.cpp
-    source/owo.cpp
-    source/swkbd.cpp
-    source/web.cpp
-    source/hasher.cpp
-    source/i18n.cpp
-    source/threaded_file_transfer.cpp
-    source/title_info.cpp
-    source/minizip_helper.cpp
-    source/msp.cpp
-    source/nx_versions.cpp
-
-    source/utils/utils.cpp
-    source/utils/audio.cpp
-    source/utils/devoptab_common.cpp
-    source/utils/devoptab_romfs.cpp
-    source/utils/devoptab_save.cpp
-    source/utils/devoptab_nro.cpp
-    source/utils/devoptab_nca.cpp
-    source/utils/devoptab_nsp.cpp
-    source/utils/devoptab_xci.cpp
-    source/utils/devoptab_zip.cpp
-    source/utils/devoptab_bfsar.cpp
-    source/utils/devoptab_vfs.cpp
-    source/utils/devoptab_fatfs.cpp
-    source/utils/devoptab_mounts.cpp
-    source/utils/devoptab.cpp
-    source/utils/ownfoil.cpp
-    source/utils/ownfoil_discovery.cpp
-    source/utils/ownfoil_api.cpp
-    source/utils/ownfoil_installed.cpp
-
-    source/usb/base.cpp
-    source/usb/usbds.cpp
-    source/usb/usbhs.cpp
-    source/usb/usb_uploader.cpp
-    source/usb/usb_installer.cpp
-    source/usb/usb_dumper.cpp
-
-    source/yati/yati.cpp
-    source/yati/container/nsp.cpp
-    source/yati/container/xci.cpp
-    source/yati/source/file.cpp
     source/yati/source/http.cpp
-    source/yati/source/stream.cpp
-    source/yati/source/stream_file.cpp
-
-    source/yati/nx/es.cpp
-    source/yati/nx/keys.cpp
-    source/yati/nx/nca.cpp
-    source/yati/nx/ncz.cpp
-    source/yati/nx/ncm.cpp
-    source/yati/nx/ns.cpp
-
-    source/yati/nx/nxdumptool_rsa.c
-    source/yati/nx/nxdumptool/save.c
+    source/utils/devoptab_common.cpp
+    source/threaded_file_transfer.cpp
+    source/minimal_app.cpp
+    source/ui/menus/main_menu.cpp
+    source/ui/progress_box.cpp
+    source/ui/option_box.cpp
+    source/ui/widget.cpp
+    source/ui/scrolling_text.cpp
+    source/ui/notification.cpp
+    source/ui/nvg_util.cpp
+    source/fs.cpp
+    source/i18n.cpp
+    source/utils/utils.cpp
+    source/log.cpp
 )
+target_compile_options(sphaira PRIVATE -ffunction-sections -fdata-sections)
+target_link_options(sphaira PRIVATE -Wl,--gc-sections)
 
 target_compile_definitions(sphaira PRIVATE
     -DAPP_VERSION="${sphaira_VERSION}"
